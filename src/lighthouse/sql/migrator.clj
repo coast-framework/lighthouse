@@ -1,13 +1,9 @@
 (ns lighthouse.sql.migrator
   (:require [clojure.string :as string]
-            [lighthouse.util :refer [snake-case]]))
-
-(defn col? [m]
-  (contains? m :db/col))
+            [lighthouse.util :as util :refer [snake-case rel? col?]]))
 
 (defn not-null [m]
-  (when (false? (or (:db/nil? m)
-                    (:db/nil m)))
+  (when (false? (:db/nil? m))
     "not null"))
 
 (defn col-default [m]
@@ -15,7 +11,7 @@
     (str "default " (get m :db/default))))
 
 (defn col-name [m]
-  (-> m :db/col name snake-case))
+  (-> m :db/col util/col-name))
 
 (defn col [m]
   (->> [(col-name m)
@@ -26,18 +22,15 @@
        (string/join " ")))
 
 (defn add-column [m]
-  (let [table (-> m :db/col namespace snake-case)
-        unique (if (or (contains? m :db/unique?)
-                       (contains? m :db/unique))
-                  (str "create unique index idx_" table "_" (col-name m) " on " table " (" (col-name m) ")")
-                  nil)
-        statements [(str "alter table " table " add column " (col m))
-                    unique]]
-    (string/join ";\n"
-      (filter some? statements))))
+  (let [table (-> m :db/col namespace snake-case)]
+    (str "alter table " table " add column " (col m))))
 
-(defn rel? [m]
-  (contains? m :db/rel))
+(defn add-unique-index [m]
+  (let [table (-> m :db/col namespace snake-case)]
+    (str "create unique index idx_" table "_" (col-name m) " on " table " (" (col-name m) ")")))
+
+(defn unique? [m]
+  (true? (:db/unique? m)))
 
 (defn one? [m]
   (and (rel? m)
@@ -53,7 +46,7 @@
 
 (defn rel [{:db/keys [rel ref delete]}]
   (let [on-delete (str "on delete " (or delete "cascade"))]
-    (str (-> rel name snake-case) " integer not null references " (-> ref namespace snake-case) "(" (-> ref name snake-case) ") " on-delete)))
+    (str (-> rel name snake-case) " integer references " (-> ref namespace snake-case) "(" (-> ref name snake-case) ") " on-delete)))
 
 (defn add-rel [m]
   (let [table (-> m :db/rel namespace snake-case)]
@@ -65,15 +58,6 @@
        " updated_at timestamp,"
        " created_at timestamp not null default current_timestamp"
        " )"))
-
-(defn drop? [m]
-  (and (contains? m :db/id)
-       (nil? (:db/col m))))
-
-(defn drop-column-statement [k]
-  (let [table (-> k namespace snake-case)
-        col (-> k name snake-case)]
-    (str "alter table " table " drop column " col)))
 
 (defn rename? [m]
   (and (contains? m :db/id)
@@ -100,11 +84,11 @@
                                 (map add-rel))
         rename-col-statements (->> (filter rename? v)
                                    (map rename-column-statement))
-        drop-col-statements (->> (filter drop? v)
-                                 (map drop-column-statement))]
-    (string/join "; "
+        add-unique-indexes (->> (filter unique? v)
+                                (map add-unique-index))]
+    (filter some?
       (concat table-statements
               add-column-statements
               add-rel-statements
               rename-col-statements
-              drop-col-statements))))
+              add-unique-indexes))))

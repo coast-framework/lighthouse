@@ -43,11 +43,10 @@ Change your db schema like this
 
 ; if you're unsure of what's about to happen, run this instead
 ; it will output the migration sql instead
-(lighthouse.sql/migrate todos-users)
+(sql/migrate todos-users)
 
 ; there is a version of each function (q, pull, insert, update!, upsert, delete)
-; in the sql namespace if you're ever like what the heck is happening?
-; also, PR's welcome 😎!
+; in the lighthouse.sql namespace if you're ever like what the heck is happening?
 ```
 
 Made a mistake with a column name? No problem, rename columns like this
@@ -58,61 +57,48 @@ Made a mistake with a column name? No problem, rename columns like this
 (db/migrate conn rename-done)
 ```
 
-Need to drop a column?
-
-```clojure
-(def better-done [{:db/id :todo/done :db/col nil} ; set :db/col to nil to drop
-                  {:db/col :todo/done-at :db/type "timestamp" :db/default "now()" :db/nil? false :db/index? true}]) ; create a new column done_at
-
-(db/migrate conn rename-done)
-```
-
 Insert data into the database like this
 
 ```clojure
-(db/insert conn {:person/name "swlkr"
-                 :person/todos [{:todo/name "write readme"
-                                 :todo/done true}
+; simple one row insert
+(let [p (db/insert conn {:person/name "swlkr"})
 
-                                {:todo/name "write tests 😅"
-                                 :todo/done false}]})
+  ; insert multiple rows like this
+  ; p is auto-resolved to (get p :person/id)
+  (db/insert conn [{:todo/name "write readme"
+                    :todo/person p
+                    :todo/done true}
+                   {:todo/name "write tests 😅"
+                    :todo/person p
+                    :todo/done false}]})
 
-; returns
-
-{:person/name "swlkr"
- :person/todos [{:todo/name "write readme"
-                 :todo/done true
-                 :todo/id 1}
-                {:todo/name "write tests 😅"
-                 :todo/done false
-                 :todo/id 2}]}
-
-; or like this
-
-(db/insert conn {:todo/name "write a blog post"
-                 :todo/done false})
-
-; or insert multiple rows like this
-
-(db/insert conn [{:person/name "swlkr1"} {:person/name "swlkr2"}])
+; or just manually set the foreign key integer value
+(db/insert conn [{:todo/name "write readme"
+                  :todo/person 1
+                  :todo/done true}
+                 {:todo/name "write tests 😅"
+                  :todo/person 1
+                  :todo/done false}]})
 ```
 
 Update data like this
 
 ```clojure
-; don't forget the ! didn't want to overwrite a core clojure function
-(db/update! conn {:todo/id 2 :todo/name "write tests 😅😅😅"})
+(db/update conn {:todo/id 2 :todo/name "write tests 😅😅😅"})
 
-; there's also this
-(db/upsert conn {:todo/id 2 :todo/name "write tests 😅😅😅"})
+; there is no update with a where clause, you'll have to select then multi update
+(let [todos (db/q conn '[:select todo/id
+                         :where [todo/done false]]) ; => [{:todo/id 2} {:todo/id 3}]
+  (db/update conn (map #(assoc % :todo/done true) todos)))
 ```
 
 Query data like this
 
 ```clojure
 (db/q conn '[:select todo/name todo/done
-             :where [todo/done ?todo/done]]
-           {:todo/done true})
+             :where [todo/done ?done]]
+             :order todo/created-at desc
+           {:done true})
 ; => [{:todo/name "write readme" :todo/done true}]
 
 ; or like this
@@ -128,16 +114,27 @@ Query data like this
 
 ; or like this
 (db/pull conn '[person/name {:person/todos [todo/name todo/done]}]
-              [person/name "swlkr"]])
+              [:person/name "swlkr"]])
 ; => {:person/name "swlkr" :person/todos [{:todo/name "write readme" :todo/done true}]}
+
+; if you don't want to specify every column in great detail, you don't have to
+(db/q conn '[:select todo/*
+             :where [todo/done false]])
+; => [{:todo/id 1 :todo/name ... :todo/done false :todo/created-at ...}]
+
+; joins are supported too
+(db/q conn '[:select todo/* person/*
+             :joins person])
+; => [{:todo/id 1 :todo/name ... :person/id 1 :person/name "swlkr" ...}]
 ```
 
-Delete data like this
+Deleting data like this
 
 ```clojure
 (db/delete conn {:todo/id 1})
 
 ; or multiple rows like this
-
 (db/delete conn [{:todo/id 1} {:todo/id 2} {:todo/id 3}])
+
+; delete only works for keys named "id" for now
 ```

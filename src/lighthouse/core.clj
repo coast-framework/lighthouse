@@ -1,7 +1,13 @@
 (ns lighthouse.core
   (:require [clojure.string :as string]
-            [lighthouse.migrator :as migrator])
-  (:import (com.zaxxer.hikari HikariConfig HikariDataSource)))
+            [clojure.java.jdbc :as jdbc]
+            [clojure.edn :as edn]
+            [lighthouse.migrator :as migrator]
+            [lighthouse.sql.insert :as sql.insert]
+            [lighthouse.sql.update :as sql.update]
+            [lighthouse.sql.delete :as sql.delete])
+  (:import (com.zaxxer.hikari HikariConfig HikariDataSource))
+  (:refer-clojure :exclude [update]))
 
 (def opts {:auto-commit        true
            :read-only          false
@@ -17,7 +23,6 @@
   (let [m (merge opts m)
         c (doto (HikariConfig.)
             (.setDriverClassName     "org.sqlite.JDBC")
-            (.setConnectionTestQuery "SELECT 1")
             (.setJdbcUrl             (str "jdbc:sqlite:" s))
             (.setAutoCommit          (:auto-commit m))
             (.setReadOnly            (:read-only m))
@@ -43,3 +48,21 @@
 
 (defn migrate [c migration]
   (migrator/migrate c migration))
+
+(defn schema [c]
+  (migrator/schema c))
+
+(defn insert [c val]
+  (let [v (sql.insert/sql-vec val)]
+    (jdbc/execute! c v)))
+
+(defn update [c val]
+  (let [vecs (sql.update/sql-vec val)]
+    (jdbc/with-db-transaction [conn c]
+      (doall
+        (for [v vecs]
+          (jdbc/execute! conn v))))))
+
+(defn delete [c val]
+  (let [v (sql.delete/sql-vec val)]
+    (jdbc/execute! c v)))

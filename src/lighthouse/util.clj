@@ -25,3 +25,27 @@
 
 (def kebab-case (partial convert-case #"_" "-"))
 (def snake-case (partial convert-case #"-" "_"))
+
+(defn col? [m]
+  (contains? m :db/col))
+
+(defn rel? [m]
+  (contains? m :db/rel))
+
+(defn sqlize [k]
+  (if (qualified-ident? k)
+    (str (-> k namespace snake-case) "." (-> k name snake-case))
+    (-> k name snake-case)))
+
+(defn col-name [k]
+  (-> k name snake-case))
+
+(defn table [t]
+  (str (->> (map first t)
+            (filter qualified-ident?)
+            (first)
+            (namespace))))
+
+(defn unqualify-keys [m]
+  (->> (map (fn [[k v]] [(-> k name keyword) v]) m)
+       (into {})))
