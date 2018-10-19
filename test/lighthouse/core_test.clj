@@ -1,0 +1,1 @@
+(ns lighthouse.core-test)
