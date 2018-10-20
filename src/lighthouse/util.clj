@@ -32,7 +32,7 @@
 (defn rel? [m]
   (contains? m :db/rel))
 
-(defn sqlize [k]
+(defn qualified-col-name [k]
   (if (qualified-ident? k)
     (str (-> k namespace snake-case) "." (-> k name snake-case))
     (-> k name snake-case)))
@@ -48,4 +48,13 @@
 
 (defn unqualify-keys [m]
   (->> (map (fn [[k v]] [(-> k name keyword) v]) m)
+       (into {})))
+
+(defn sql-vec? [v]
+  (and (vector? v)
+       (string? (first v))
+       (not (string/blank? (first v)))))
+
+(defn map-vals [f m]
+  (->> (map (fn [[k v]] [k (f v)]) m)
        (into {})))

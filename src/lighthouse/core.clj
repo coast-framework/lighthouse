@@ -5,7 +5,8 @@
             [lighthouse.migrator :as migrator]
             [lighthouse.sql.insert :as sql.insert]
             [lighthouse.sql.update :as sql.update]
-            [lighthouse.sql.delete :as sql.delete])
+            [lighthouse.sql.delete :as sql.delete]
+            [lighthouse.sql.query :as sql.query])
   (:import (com.zaxxer.hikari HikariConfig HikariDataSource))
   (:refer-clojure :exclude [update]))
 
@@ -66,3 +67,10 @@
 (defn delete [c val]
   (let [v (sql.delete/sql-vec val)]
     (jdbc/execute! c v)))
+
+(defn q
+  ([c v params]
+   (let [schema (schema c)]
+     (sql.query/sql-vec schema v params)))
+  ([c v]
+   (q c v {})))

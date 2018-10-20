@@ -1,12 +1,20 @@
 (ns lighthouse.migrator
   (:require [lighthouse.sql.migrator :as sql]
-            [lighthouse.util :refer [col? rel?]]
+            [lighthouse.util :refer [col? rel? map-vals]]
             [clojure.java.jdbc :as jdbc]
             [clojure.edn :as edn])
   (:import (org.sqlite SQLiteException)))
 
 (defn migrations [c]
   (jdbc/query c ["select * from coast_schema_migrations"]))
+
+(defn db-schema [c]
+  (jdbc/query c ["select m.name as table_name,
+                         m.name || '/' || p.name as column_name
+                  from sqlite_master m
+                  left outer join pragma_table_info((m.name)) p
+                        on m.name <> p.name
+                  order by table_name, column_name"]))
 
 (defn mapify-schema [m]
   (cond
@@ -15,11 +23,16 @@
     :else m))
 
 (defn schema [c]
-  (->> (map :migration (migrations c))
-       (map edn/read-string)
-       (mapcat identity)
-       (map mapify-schema)
-       (apply merge)))
+  (let [coast-schema (->> (map :migration (migrations c))
+                          (map edn/read-string)
+                          (mapcat identity)
+                          (map mapify-schema)
+                          (apply merge))
+        db-schema  (map-vals #(->> (map (fn [m] (dissoc m :table_name)) %)
+                                   (map :column_name)
+                                   (map keyword))
+                    (group-by #(-> % :table_name keyword) (db-schema c)))]
+    (merge coast-schema db-schema)))
 
 (defn migrate [c migration]
   (let [statements (sql/migrate migration)]
