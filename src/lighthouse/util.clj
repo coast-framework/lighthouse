@@ -58,3 +58,15 @@
 (defn map-vals [f m]
   (->> (map (fn [[k v]] [k (f v)]) m)
        (into {})))
+
+(defn wrap [val]
+  (if (sequential? val)
+    val
+    [val]))
+
+(defn flat [coll]
+  (mapcat #(if (sequential? %) % [%]) coll))
+
+(defn debug [val]
+  (println val)
+  val)

@@ -3,11 +3,10 @@
             [clojure.java.jdbc :as jdbc]
             [clojure.edn :as edn]
             [lighthouse.migrator :as migrator]
-            [lighthouse.sql.insert :as sql.insert]
-            [lighthouse.sql.update :as sql.update]
-            [lighthouse.sql.delete :as sql.delete]
-            [lighthouse.sql.query :as sql.query])
+            [lighthouse.sql :as sql]
+            [lighthouse.util :refer [wrap kebab-case]])
   (:import (com.zaxxer.hikari HikariConfig HikariDataSource))
+  (:import (java.time Instant))
   (:refer-clojure :exclude [update]))
 
 (def opts {:auto-commit        true
@@ -39,7 +38,7 @@
   "Takes a string returns a connection pool from a sqlite connection string"
   ([s m]
    (if (string/blank? s)
-     (throw (Exception. "You need to give lighthouse.core/connection a jdbc connection string"))
+     (throw (Exception. "You need to give lighthouse.core/connection the path to your db file string"))
      (pool s m)))
   ([s]
    (connect s {})))
@@ -53,24 +52,58 @@
 (defn schema [c]
   (migrator/schema c))
 
-(defn insert [c val]
-  (let [v (sql.insert/sql-vec val)]
-    (jdbc/execute! c v)))
+(defn transact
+  ([conn query params]
+   (let [schema (schema conn)
+         sql (sql/sql-vec schema query {})]
+     (jdbc/execute! conn sql)))
+  ([conn query]
+   (transact conn query {})))
 
-(defn update [c val]
-  (let [vecs (sql.update/sql-vec val)]
-    (jdbc/with-db-transaction [conn c]
-      (doall
-        (for [v vecs]
-          (jdbc/execute! conn v))))))
+(defn insert [conn val]
+  (let [v (wrap val)
+        cols (->> (mapcat identity v)
+                  (map first)
+                  (distinct))
+        values (map #(map (fn [x] (second x)) %) v)]
+    (transact conn (concat
+                    (conj cols :insert)
+                    (conj values :values)))))
 
-(defn delete [c val]
-  (let [v (sql.delete/sql-vec val)]
-    (jdbc/execute! c v)))
+(defn update [conn val]
+  (let [v (wrap val)
+        table (-> v first keys first namespace)
+        pk (first (filter #(= "id" (name %)) (-> v first keys)))]
+    (transact conn
+      (concat
+        [:update table
+         :where [(name pk) (map #(get % pk) v)]]
+        (conj (->> (map #(dissoc % pk) v)
+                   (mapcat identity)
+                   (distinct))
+              :set)))))
+
+(defn delete [conn val]
+  (let [v (wrap val)
+        table (-> v first keys first namespace)
+        pk (-> v first ffirst)]
+    (transact conn [:delete
+                    :from table
+                    :where [pk (map #(get % pk) v)]])))
+
+(defn qualify-col [s]
+  (let [parts (string/split s #"\$")
+        k-ns (first (map #(string/replace % #"_" "-") parts))
+        k-n (->> (rest parts)
+                 (map #(string/replace % #"_" "-"))
+                 (string/join "-"))]
+    (keyword k-ns k-n)))
 
 (defn q
-  ([c v params]
-   (let [schema (schema c)]
-     (sql.query/sql-vec schema v params)))
-  ([c v]
-   (q c v {})))
+  ([conn v params]
+   (let [schema (schema conn)
+         sql (sql/sql-vec schema v params)]
+     (jdbc/query conn sql {:keywordize? false
+                           :identifiers qualify-col})))
+  ([conn v]
+   (q conn v {})))

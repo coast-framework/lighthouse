@@ -1,6 +1,6 @@
 (ns lighthouse.migrator
   (:require [lighthouse.sql.migrator :as sql]
-            [lighthouse.util :refer [col? rel? map-vals]]
+            [lighthouse.util :refer [col? rel? map-vals kebab-case]]
             [clojure.java.jdbc :as jdbc]
             [clojure.edn :as edn])
   (:import (org.sqlite SQLiteException)))
@@ -30,22 +30,25 @@
                           (apply merge))
         db-schema  (map-vals #(->> (map (fn [m] (dissoc m :table_name)) %)
                                    (map :column_name)
+                                   (map kebab-case)
                                    (map keyword))
-                    (group-by #(-> % :table_name keyword) (db-schema c)))]
+                    (group-by #(-> % :table_name kebab-case keyword) (db-schema c)))]
     (merge coast-schema db-schema)))
 
 (defn migrate [c migration]
-  (let [statements (sql/migrate migration)]
-    (try
-      (jdbc/with-db-transaction [conn c]
-        (jdbc/execute! conn "create table if not exists coast_schema_migrations (migration text unique not null, created_at timestamp not null default current_timestamp)")
-        (jdbc/execute! conn "create table if not exists coast_schema (schema text unique not null, updated_at timestamp not null default current_timestamp)")
-        (doall
-          (for [s statements]
-            (jdbc/execute! conn s)))
-        (jdbc/insert! conn :coast_schema_migrations {:migration (str migration)})
-        (jdbc/execute! conn ["insert or replace into coast_schema (schema)
+  (let [statements (sql/migrate migration)
+        migrations (set (map :migration (migrations c)))]
+    (when (not (contains? migrations (str migration)))
+      (try
+        (jdbc/with-db-transaction [conn c]
+          (jdbc/execute! conn "create table if not exists coast_schema_migrations (migration text unique not null, created_at timestamp not null default current_timestamp)")
+          (jdbc/execute! conn "create table if not exists coast_schema (schema text unique not null, updated_at timestamp not null default current_timestamp)")
+          (doall
+            (for [s statements]
+              (jdbc/execute! conn s)))
+          (jdbc/insert! conn :coast_schema_migrations {:migration (str migration)})
+          (jdbc/execute! conn ["insert or replace into coast_schema (schema)
                               values (?)" (str (schema conn))]))
-      (catch SQLiteException e
-        (when (and (not= "[SQLITE_CONSTRAINT]  Abort due to constraint violation (UNIQUE constraint failed: coast_schema_migrations.migration)" (.getMessage e)))
-          (throw e))))))
+        (catch SQLiteException e
+          (when (and (not= "[SQLITE_CONSTRAINT]  Abort due to constraint violation (UNIQUE constraint failed: coast_schema_migrations.migration)" (.getMessage e)))
+            (throw e)))))))

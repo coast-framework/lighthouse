@@ -1,10 +1,14 @@
-(ns lighthouse.sql.query
+(ns lighthouse.sql
   (:require [clojure.string :as string]
             [clojure.walk :as walk]
-            [lighthouse.util :refer [snake-case sql-vec? qualified-col-name]]))
+            [lighthouse.util :refer [table snake-case sql-vec? qualified-col-name rel? flat]])
+  (:refer-clojure :exclude [update])
+  (:import (java.time Instant)))
+
+(def ops #{:select :from :update :set :insert :delete :pull :joins :where :order :limit :offset :group :values})
 
 (defn op? [k]
-  (contains? #{:select :from :update :set :insert :insert-into :delete :pull :joins :join :where :order :limit :offset :group :group-by} k))
+  (contains? ops k))
 
 (defn sql-map [v]
   (let [parts (partition-by op? v)
@@ -13,7 +17,8 @@
     (zipmap (map first ops) (map vec args))))
 
 (defn replace-val [q params val]
-  (if (string/starts-with? (str val) "?")
+  (if (and (ident? val)
+           (string/starts-with? (str val) "?"))
     (let [rk (-> (string/replace-first val #"\?" "")
                  (keyword))
           rv (get params rk)]
@@ -31,17 +36,21 @@
        (-> k namespace snake-case) "$" (-> k name snake-case)))
 
 (defn expand-star [schema k]
-  (let [t (-> k namespace keyword)]
-    (get schema t)))
+  (get schema k))
 
 (defn select [schema v]
-  (let [v (->> (map #(expand-star schema %) v)
-               (mapcat identity))
+  (let [v (if (contains? (set (map name v)) "*")
+            (->> (map namespace v)
+                 (distinct)
+                 (map keyword)
+                 (mapcat #(expand-star schema %))
+                 (concat v)
+                 (filter #(not= "*" (name %))))
+            v)
         s (->> (map select-col v)
                (string/join ", "))]
     (if (not (string/blank? s))
-      {:select (str "select " s)
-       :select-ks v}
+      {:select (str "select " s)}
       (throw (Exception. (str "select needs at least one argument. You typed :select"))))))
 
 (defn from [v]
@@ -70,13 +79,10 @@
   (str "join " (join-statement k)))
 
 (defn joins [schema args]
-  (let [kw-args (map keyword args)]
-    {:joins (->> (select-keys schema kw-args)
-                 (map (fn [[_ v]] [(:db/ref v) (:db/rel v)]))
-                 (map join)
-                 (string/join "\n"))
-     :join-ks (->> (select-keys schema kw-args)
-                   (map (fn [[_ v]] (:db/ref v))))}))
+  {:joins (->> (select-keys schema (map keyword args))
+               (map (fn [[_ v]] [(:db/ref v) (:db/rel v)]))
+               (map join)
+               (string/join "\n"))})
 
 (defn wrap-str [ws s]
   (if (string/blank? s)
@@ -136,9 +142,6 @@
       (throw (Exception. (str "where only accepts and & or. You typed: " (if (nil? v) "nil" v))))
       (map where-clause wv))))
 
-(defn flat [coll]
-  (mapcat #(if (sequential? %) % [%]) coll))
-
 (defn where [v]
   (if (sql-vec? v)
     {:where (str "where " (first v))
@@ -173,28 +176,80 @@
                                 (string/join ", ")))})
 
 (defn delete [v]
-  {:delete (str "delete")})
+  {:delete (str "delete")
+   :from (str "from " (first v))})
+
+(defn resolve-rel [schema val]
+  (if (map? val)
+    (as-> (vals schema) r
+          (filter #(contains? (set (keys val)) (:db/ref %)) r)
+          (first r)
+          (:db/ref r)
+          (get val r val))
+    val))
+
+(defn resolve-rels [schema val]
+  (mapv #(resolve-rel schema %) val))
+
+(defn insert [schema v]
+  (let [table (-> v first namespace snake-case)]
+    {:insert (str "insert into " table " ("
+                  (->> (map name v)
+                       (map snake-case)
+                       (string/join ", "))
+                 ")")}))
+
+(defn values [schema v]
+  (let [rv (mapv #(resolve-rels schema %) v)]
+   {:values (str "values " (string/join ","
+                            (map #(str "(" (->> (map (fn [_] "?") %)
+                                                (string/join ","))
+                                      ")")
+                                 rv)))
+    :args (flat rv)}))
+
+(defn update [v]
+  (let [table (-> v first snake-case)]
+    {:update (str "update " table)}))
+
+(defn update-set [schema v]
+  (let [v (conj v [:updated-at (Instant/now)])]
+    {:update-set (str "set " (->> (map (fn [[k _]] (str (-> k name snake-case) " = ?")) v)
+                                  (string/join ", ")))
+     :update-set-args (map second v)}))
 
 (defn sql-part [schema [k v]]
   (condp = k
     :select (select schema v)
     :from (from v)
-    ; :pull (pull v)
+    ;:pull (pull v)
     :joins (joins schema v)
-    :join (joins schema v)
     :where (where v)
     :order (order v)
     :limit (limit v)
     :offset (offset v)
     :group (group v)
-    :group-by (group v)
     :delete (delete v)
-    ;:insert (insert v)
-    ;:insert-into (insert v)
-    ;:update (update v)
+    :values (values schema v)
+    :insert (insert schema v)
+    :update (update v)
+    :set (update-set schema v)
     nil))
 
 (defn sql-vec [schema v params]
-  (->> (replace-vals v params)
-       (sql-map)
-       (map #(sql-part schema %))))
+  (let [m (->> (replace-vals v params)
+               (sql-map)
+               (map #(sql-part schema %))
+               (apply merge))
+        {:keys [select pull from joins where order offset limit group args delete insert values update update-set update-set-args]} m
+        sql (->> (filter some? [select pull delete update update-set insert values from joins where order offset limit group])
+                 (string/join " "))]
+    (apply conj [sql] (concat (filter some? update-set-args) (filter some? args)))))
+
+(comment
+  (def conn (lighthouse.core/connect "dev.db"))
+
+  (sql-vec (lighthouse.core/schema conn) '[:insert todo/name todo/done todo/person
+                                           :values ["test1" false {:person/id 1}]
+                                                   ["test2" true {:person/id 1}]]
+                                         {}))
