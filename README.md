@@ -42,7 +42,7 @@ Change your db schema like this
 ; new migration
 
 ; if you're unsure of what's about to happen, run this instead
-; it will output the migration sql instead
+; it will output the sql and do nothing to the database 
 (sql/migrate todos-users)
 
 ; there is a version of each function (q, pull, insert, update!, upsert, delete)
@@ -86,10 +86,15 @@ Update data like this
 ```clojure
 (db/update conn {:todo/id 2 :todo/name "write tests 😅😅😅"})
 
-; there is no update with a where clause, you'll have to select then multi update
+; you can either perform an update after a select
 (let [todos (db/q conn '[:select todo/id
                          :where [todo/done false]]) ; => [{:todo/id 2} {:todo/id 3}]
   (db/update conn (map #(assoc % :todo/done true) todos)))
+
+; or update from transact
+(db/transact conn '[:update todo
+                    :set [todo/done true]
+                    :where [todo/id [2 3]]])
 ```
 
 Query data like this
@@ -103,11 +108,13 @@ Query data like this
 
 ; or like this
 (db/q conn '[:select todo/name todo/done
+             :from todo
              :where [todo/done true]])
 ; => [{:todo/name "write readme" :todo/done true}]
 
 ; or like this
 (db/q conn '[:pull [person/name {:person/todos [todo/name todo/done]}]
+             :from person
              :where [todo/done ?todo/done]]
            {:todo/done true})
 ; => [{:person/name "swlkr" :person/todos [{:todo/name "write readme" :todo/done true}]}]
@@ -117,18 +124,20 @@ Query data like this
               [:person/name "swlkr"]])
 ; => {:person/name "swlkr" :person/todos [{:todo/name "write readme" :todo/done true}]}
 
-; if you don't want to specify every column in great detail, you don't have to
+; if you don't want to specify every column, you don't have to
 (db/q conn '[:select todo/*
+             :from todo
              :where [todo/done false]])
 ; => [{:todo/id 1 :todo/name ... :todo/done false :todo/created-at ...}]
 
 ; joins are supported too
 (db/q conn '[:select todo/* person/*
+             :from todo
              :joins person])
 ; => [{:todo/id 1 :todo/name ... :person/id 1 :person/name "swlkr" ...}]
 ```
 
-Deleting data like this
+Delete data like this
 
 ```clojure
 (db/delete conn {:todo/id 1})
@@ -136,5 +145,8 @@ Deleting data like this
 ; or multiple rows like this
 (db/delete conn [{:todo/id 1} {:todo/id 2} {:todo/id 3}])
 
-; delete only works for keys named "id" for now
+; there's always transact too
+(db/transact conn '[:delete
+                    :from todo
+                    :where [todo/id [1 2 3]]])
 ```
