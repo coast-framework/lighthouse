@@ -23,7 +23,9 @@
            :maximum-pool-size  10
            :register-mbeans    false})
 
-(defn pool [s m]
+(defn pool
+  "Shamelessly stolen from hikari-cp and makes a new hikaricp data source"
+  [s m]
   (let [m (merge opts m)
         c (doto (HikariConfig.)
             (.setDriverClassName     "org.sqlite.JDBC")
@@ -47,16 +49,28 @@
   ([s]
    (connect s {})))
 
-(defn disconnect [^HikariDataSource ds]
+(defn disconnect
+  "Takes a java hikaricp source and closes the connection to the database"
+  [^HikariDataSource ds]
   (.close ds))
 
-(defn migrate [c migration]
+(defn migrate
+  "Takes a jdbc connection or datasource and a migration vector"
+  [c migration]
   (migrator/migrate c migration))
 
-(defn schema [c]
+(defn schema
+  "Shows the current lighthouse schema"
+  [c]
   (migrator/schema c))
 
 (defn transact
+  "Takes a jdbc connection, a query and an optional map of params
+
+      Ex: (transact conn '[:delete
+                           :from todo
+                           :where [todo/id 1]])
+  "
   ([conn query params]
    (let [schema (schema conn)
          sql (sql/sql-vec schema query {})]
@@ -64,7 +78,9 @@
   ([conn query]
    (transact conn query {})))
 
-(defn insert [conn val]
+(defn insert
+  "Inserts a map or a vector of maps into the db. All maps need to have the same keys."
+  [conn val]
   (let [v (wrap val)
         cols (->> (mapcat identity v)
                   (map first)
@@ -74,7 +90,9 @@
                     (conj cols :insert)
                     (conj values :values)))))
 
-(defn update [conn val]
+(defn update
+  "Updates a map or a vector of maps in the db. All maps need to have one primary key and the same set of keys."
+  [conn val]
   (let [v (wrap val)
         table (-> v first keys first namespace)
         pk (first (filter #(= "id" (name %)) (-> v first keys)))]
@@ -87,7 +105,9 @@
                    (distinct))
               :set)))))
 
-(defn delete [conn val]
+(defn delete
+  "Deletes a map or a vector of maps by primary key only"
+  [conn val]
   (let [v (wrap val)
         table (-> v first keys first namespace)
         pk (-> v first ffirst)]
@@ -95,7 +115,9 @@
                     :from table
                     :where [pk (map #(get % pk) v)]])))
 
-(defn qualify-col [s]
+(defn qualify-col
+  "This is a relatively complex function to replace col names with $ in them, pull comes at a cost"
+  [s]
   (let [parts (string/split s #"\$")
         k-ns (first (map #(string/replace % #"_" "-") parts))
         k-n (->> (rest parts)
@@ -103,7 +125,9 @@
                  (string/join "-"))]
     (keyword k-ns k-n)))
 
-(defn parse-json [schema val]
+(defn parse-json
+  "Parses json from pull queries"
+  [schema val]
   (if (and (sequential? val)
            (= 2 (count val))
            (or (= :many (get-in schema [(first val) :db/type]))
@@ -112,7 +136,9 @@
     [(first val) (json/read-str (second val) :key-fn qualify-col)]
     val))
 
-(defn coerce-inst [val]
+(defn coerce-inst
+  "Coerce json iso8601 to clojure #inst"
+  [val]
   (if (string? val)
     (try
       (instant/read-instant-timestamp val)
@@ -120,7 +146,9 @@
         val))
     val))
 
-(defn coerce-timestamp-inst [val]
+(defn coerce-timestamp-inst
+  "Coerce timestamps to clojure #inst"
+  [val]
   (if (string? val)
     (try
       (let [fmt (SimpleDateFormat. "yyyy-MM-dd HH:mm:ss")]
@@ -130,6 +158,10 @@
     val))
 
 (defn q
+  "The main entry point for queries
+
+    Ex: (q conn '[:select todo/*])
+  "
   ([conn v params]
    (let [schema (schema conn)
          sql (sql/sql-vec schema v params)]
@@ -142,7 +174,9 @@
   ([conn v]
    (q conn v {})))
 
-(defn pull [conn v where-clause]
+(defn pull
+  "The main entry point for queries that return a nested result based on a lighthouse schema and a primary key"
+  [conn v where-clause]
   (first
     (q conn [:pull v
              :where where-clause])))
