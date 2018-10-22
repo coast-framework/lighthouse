@@ -6,7 +6,9 @@
   (:import (org.sqlite SQLiteException)))
 
 (defn migrations [c]
-  (jdbc/query c ["select * from coast_schema_migrations"]))
+  (jdbc/with-db-transaction [conn c]
+    (jdbc/execute! conn "create table if not exists coast_schema_migrations (migration text unique not null, created_at timestamp not null default current_timestamp)")
+    (jdbc/query conn ["select * from coast_schema_migrations"])))
 
 (defn db-schema [c]
   (jdbc/query c ["select m.name as table_name,
@@ -41,7 +43,6 @@
     (when (not (contains? migrations (str migration)))
       (try
         (jdbc/with-db-transaction [conn c]
-          (jdbc/execute! conn "create table if not exists coast_schema_migrations (migration text unique not null, created_at timestamp not null default current_timestamp)")
           (jdbc/execute! conn "create table if not exists coast_schema (schema text unique not null, updated_at timestamp not null default current_timestamp)")
           (doall
             (for [s statements]
