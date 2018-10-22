@@ -11,7 +11,8 @@
   (:import (com.zaxxer.hikari HikariConfig HikariDataSource))
   (:import (java.time Instant)
            (java.text SimpleDateFormat))
-  (:refer-clojure :exclude [update]))
+  (:refer-clojure :exclude [update])
+  (:gen-class))
 
 (def opts {:auto-commit        true
            :read-only          false
