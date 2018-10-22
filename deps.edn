@@ -1,9 +1,11 @@
-{:paths ["src" "resources" "test"]
+{:paths ["src" "test"]
+
  :deps {org.clojure/clojure {:mvn/version "1.9.0"}
         org.xerial/sqlite-jdbc {:mvn/version "3.25.2"}
         org.clojure/java.jdbc {:mvn/version "0.7.5"}
         com.zaxxer/HikariCP {:mvn/version "2.7.8"}
         org.clojure/data.json {:mvn/version "0.2.6"}}
+
  :aliases {:repl {:extra-deps {nrepl {:mvn/version "0.4.5"}}}
            :test
              {:extra-paths ["test"]
