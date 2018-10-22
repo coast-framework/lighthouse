@@ -2,11 +2,15 @@
   (:require [clojure.string :as string]
             [clojure.java.jdbc :as jdbc]
             [clojure.edn :as edn]
+            [clojure.data.json :as json]
+            [clojure.walk :as walk]
+            [clojure.instant :as instant]
             [lighthouse.migrator :as migrator]
             [lighthouse.sql :as sql]
             [lighthouse.util :refer [wrap kebab-case]])
   (:import (com.zaxxer.hikari HikariConfig HikariDataSource))
-  (:import (java.time Instant))
+  (:import (java.time Instant)
+           (java.text SimpleDateFormat))
   (:refer-clojure :exclude [update]))
 
 (def opts {:auto-commit        true
@@ -99,11 +103,46 @@
                  (string/join "-"))]
     (keyword k-ns k-n)))
 
+(defn parse-json [schema val]
+  (if (and (sequential? val)
+           (= 2 (count val))
+           (or (= :many (get-in schema [(first val) :db/type]))
+               (= :one (get-in schema [(first val) :db/type])))
+           (string? (second val)))
+    [(first val) (json/read-str (second val) :key-fn qualify-col)]
+    val))
+
+(defn coerce-inst [val]
+  (if (string? val)
+    (try
+      (instant/read-instant-timestamp val)
+      (catch Exception e
+        val))
+    val))
+
+(defn coerce-timestamp-inst [val]
+  (if (string? val)
+    (try
+      (let [fmt (SimpleDateFormat. "yyyy-MM-dd HH:mm:ss")]
+        (.parse fmt val))
+      (catch Exception e
+        val))
+    val))
+
 (defn q
   ([conn v params]
    (let [schema (schema conn)
          sql (sql/sql-vec schema v params)]
-     (jdbc/query conn sql {:keywordize? false
-                           :identifiers qualify-col})))
+     (vec
+      (walk/postwalk coerce-timestamp-inst
+       (walk/postwalk coerce-inst
+        (walk/prewalk #(parse-json schema %)
+         (jdbc/query conn sql {:keywordize? false
+                               :identifiers qualify-col})))))))
   ([conn v]
    (q conn v {})))
+
+(defn pull [conn v where-clause]
+  (first
+    (q conn [:pull v
+             :where where-clause])))

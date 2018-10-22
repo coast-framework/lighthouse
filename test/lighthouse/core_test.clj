@@ -21,5 +21,5 @@
 
 (deftest insert-test
   (testing "insert with sql without rel"
-    (transact '[:insert person/name
-                :values "sean"])))
+    (transact conn '[:insert person/name
+                     :values ["sean"]])))

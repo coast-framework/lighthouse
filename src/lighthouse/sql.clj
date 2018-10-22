@@ -1,7 +1,7 @@
 (ns lighthouse.sql
   (:require [clojure.string :as string]
             [clojure.walk :as walk]
-            [lighthouse.util :refer [table snake-case sql-vec? qualified-col-name rel? flat]])
+            [lighthouse.util :refer [table snake-case sql-vec? qualified-col-name rel? flat namespace* name*]])
   (:refer-clojure :exclude [update])
   (:import (java.time Instant)))
 
@@ -35,26 +35,61 @@
        " as "
        (-> k namespace snake-case) "$" (-> k name snake-case)))
 
-(defn expand-star [schema k]
-  (get schema k))
+(defn expand-star [schema v]
+  (if (contains? (set (map name v)) "*")
+    (->> (map namespace v)
+         (distinct)
+         (map keyword)
+         (mapcat #(get schema %))
+         (concat v)
+         (filter #(not= "*" (name %))))
+    v))
 
 (defn select [schema v]
-  (let [v (if (contains? (set (map name v)) "*")
-            (->> (map namespace v)
-                 (distinct)
-                 (map keyword)
-                 (mapcat #(expand-star schema %))
-                 (concat v)
-                 (filter #(not= "*" (name %))))
-            v)
+  (let [v (expand-star schema v)
         s (->> (map select-col v)
                (string/join ", "))]
     (if (not (string/blank? s))
-      {:select (str "select " s)}
+      {:select (str "select " s)
+       :select-ks v}
       (throw (Exception. (str "select needs at least one argument. You typed :select"))))))
 
-(defn from [v]
-  {:from (str "from " (string/join " " v))})
+(defn rel-opts [m]
+  (let [k (-> m keys first)]
+    (if (sequential? k)
+      (sql-map (drop 1 k))
+      {})))
+
+(defn pull-limit [[i]]
+  (when (pos-int? i)
+    {:limit (str "where rn <= " i)}))
+
+(defn order [v]
+  {:order (str "order by " (->> (partition-all 2 v)
+                                (mapv vec)
+                                (mapv #(if (= 1 (count %))
+                                         (conj % 'asc)
+                                         %))
+                                (mapv #(str (qualified-col-name (first %)) " " (name (second %))))
+                                (string/join ", ")))})
+
+(defn pull-sql-part [[k v]]
+  (condp = k
+    :order (order v)
+    :limit (pull-limit v)
+    :else {}))
+
+(defn pull-from [order table]
+  (let [order (or order "order by id")]
+    (string/join "\n" ["("
+                       "select"
+                       (str "  " table ".*, ")
+                       (str "   row_number() over (" order ") as rn")
+                       (str "from " table)
+                       (str ") as " table)])))
+
+(defn one-join-col [k]
+  (str (-> k name snake-case) ".id"))
 
 (defn join-col [k]
   (let [namespace (-> k namespace snake-case)
@@ -75,14 +110,104 @@
        " = "
        (str (qualified-col-name right))))
 
-(defn join [k]
-  (str "join " (join-statement k)))
+(defn rel-key [m]
+  (let [k (-> m keys first)]
+    (if (sequential? k)
+      (-> k first)
+      k)))
+
+(defn pull-col [k]
+  (str (-> k namespace snake-case) "$" (-> k name snake-case)))
+
+(defn json-build-object [k]
+  (str "'" (pull-col k) "', " (qualified-col-name k)))
+
+(defn rel-col [k]
+  (if (qualified-ident? k)
+    (str "'" (pull-col k) "', " (pull-col k))
+    (str "'" (-> k first pull-col) "', " (-> k first pull-col))))
+
+(defn pull-join [schema m]
+  (let [k (rel-key m)
+        left (get-in schema [k :db/ref])
+        right (or (get-in schema [left :db/ref]) k)
+        joins left
+        {:keys [order limit]} (->> (rel-opts m)
+                                   (map pull-sql-part)
+                                   (apply merge))
+        val (-> m vals first)
+        v (filter qualified-ident? val)
+        maps (filter map? val)
+        child-cols (map #(-> % keys first rel-col) maps)]
+    (->> ["left outer join ("
+          "select"
+          (str (if (nil? joins)
+                 (one-join-col (keyword k))
+                 (join-col joins)) ",")
+          "json_group_array(json_object("
+          (->> (expand-star schema v)
+               (map json-build-object)
+               (concat child-cols)
+               (string/join ","))
+          (str ") " order ") as " (pull-col k))
+          (str "from " (if (nil? joins)
+                         (->> k keyword name snake-case (pull-from order))
+                         (->> joins namespace snake-case (pull-from order))))
+          (->> (map #(pull-join schema %) maps)
+               (string/join "\n"))
+          limit
+          (str "group by " (if (nil? joins)
+                             (one-join-col (keyword k))
+                             (join-col joins)))
+          (str ") " (if (nil? joins)
+                      (one-join-statement (keyword k))
+                      (join-statement [left right])))]
+         (filter some?)
+         (string/join "\n"))))
+
+(defn pull-joins [schema acc v]
+  (let [maps (filter map? v)
+        joins (map #(pull-join schema %) maps)
+        acc (concat acc joins)]
+    (if (empty? maps)
+     acc
+     (pull-joins schema acc (map #(-> % vals first) maps)))))
+
+(defn pull [schema [v]]
+  (let [cols (->> (filter qualified-ident? v)
+                  (expand-star schema))
+        maps (filter map? v)
+        rel-cols (->> (map rel-key maps)
+                      (map pull-col))
+        col-sql (string/join ", " (concat (map select-col cols)
+                                          rel-cols))
+        joins (pull-joins schema [] v)]
+    {:select (str "select " col-sql)
+     :from (str "from " (or (-> cols first namespace* snake-case)
+                            (-> (map rel-key maps) first namespace* snake-case)))
+     :joins (string/join "\n" joins)}))
+
+(defn from [v]
+  {:from (str "from " (string/join " " v))})
+
+(defn from-clause [s-ks j-ks]
+  (when (or (not (empty? s-ks))
+            (not (empty? j-ks)))
+    (let [t (-> (map #(-> % namespace snake-case) s-ks) (first))
+          j (-> (map #(-> % name snake-case) j-ks) (first))]
+      (str "from " (or t j)))))
+
+(defn join [v]
+  (str "join " (join-statement v)))
 
 (defn joins [schema args]
-  {:joins (->> (select-keys schema (map keyword args))
-               (map (fn [[_ v]] [(:db/ref v) (:db/rel v)]))
-               (map join)
-               (string/join "\n"))})
+  (let [args (map keyword args)]
+    {:joins (->> (select-keys schema args)
+                 (map (fn [[_ v]] [(:db/ref v) (:db/rel v)]))
+                 (map join)
+                 (string/join "\n"))
+     :join-ks (->> (select-keys schema args)
+                   (map (fn [[_ v]] (:db/rel v))))}))
 
 (defn wrap-str [ws s]
   (if (string/blank? s)
@@ -152,15 +277,6 @@
                 (filter some?)
                 (flat))}))
 
-(defn order [v]
-  {:order (str "order by " (->> (partition-all 2 v)
-                                (mapv vec)
-                                (mapv #(if (= 1 (count %))
-                                         (conj % 'asc)
-                                         %))
-                                (mapv #(str (qualified-col-name (first %)) " " (name (second %))))
-                                (string/join ", ")))})
-
 (defn limit [[i]]
   (if (pos-int? i)
     {:limit (str "limit " i)}
@@ -215,14 +331,15 @@
 (defn update-set [schema v]
   (let [v (conj v [:updated-at (Instant/now)])]
     {:update-set (str "set " (->> (map (fn [[k _]] (str (-> k name snake-case) " = ?")) v)
+                                  (distinct)
                                   (string/join ", ")))
-     :update-set-args (map second v)}))
+     :update-set-args (distinct (map second v))}))
 
 (defn sql-part [schema [k v]]
   (condp = k
     :select (select schema v)
     :from (from v)
-    ;:pull (pull v)
+    :pull (pull schema v)
     :joins (joins schema v)
     :where (where v)
     :order (order v)
@@ -241,15 +358,8 @@
                (sql-map)
                (map #(sql-part schema %))
                (apply merge))
-        {:keys [select pull from joins where order offset limit group args delete insert values update update-set update-set-args]} m
-        sql (->> (filter some? [select pull delete update update-set insert values from joins where order offset limit group])
+        {:keys [select select-ks pull joins join-ks where order offset limit group args delete insert values update update-set update-set-args]} m
+        from-clause (or (:from m) (from-clause select-ks join-ks))
+        sql (->> (filter some? [select pull delete update update-set insert values from-clause joins where order offset limit group])
                  (string/join " "))]
     (apply conj [sql] (concat (filter some? update-set-args) (filter some? args)))))
-
-(comment
-  (def conn (lighthouse.core/connect "dev.db"))
-
-  (sql-vec (lighthouse.core/schema conn) '[:insert todo/name todo/done todo/person
-                                           :values ["test1" false {:person/id 1}]
-                                                   ["test2" true {:person/id 1}]]
-                                         {}))

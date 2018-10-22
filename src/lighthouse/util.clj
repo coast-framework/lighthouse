@@ -70,3 +70,11 @@
 (defn debug [val]
   (println val)
   val)
+
+(defn namespace* [val]
+  (when (qualified-ident? val)
+    (namespace val)))
+
+(defn name* [val]
+  (when (ident? val)
+    (name val)))
