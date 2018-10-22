@@ -6,7 +6,7 @@ _clojure + sqlite + hikaricp connection pool + datomic inspired queries_
 Add this to your `deps.edn`
 
 ```clojure
-{:deps {coast-framework/lighthouse {:mvn/version "1.0.0"}}}
+{coast-framework/lighthouse {:mvn/version "0.1.0"}}
 ```
 
 ## Require
