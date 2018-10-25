@@ -46,10 +46,6 @@
             (first)
             (namespace))))
 
-(defn unqualify-keys [m]
-  (->> (map (fn [[k v]] [(-> k name keyword) v]) m)
-       (into {})))
-
 (defn sql-vec? [v]
   (and (vector? v)
        (string? (first v))
@@ -57,6 +53,10 @@
 
 (defn map-vals [f m]
   (->> (map (fn [[k v]] [k (f v)]) m)
+       (into {})))
+
+(defn map-keys [f m]
+  (->> (map (fn [[k v]] [(f k) v]) m)
        (into {})))
 
 (defn wrap [val]

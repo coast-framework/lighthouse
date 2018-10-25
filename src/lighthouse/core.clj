@@ -7,6 +7,7 @@
             [clojure.instant :as instant]
             [lighthouse.migrator :as migrator]
             [lighthouse.sql :as sql]
+            [lighthouse.defq :refer [query create-root-var query-fn query-fns]]
             [lighthouse.util :refer [wrap kebab-case]])
   (:import (com.zaxxer.hikari HikariConfig HikariDataSource))
   (:import (java.time Instant)
@@ -181,3 +182,12 @@
   (first
     (q conn [:pull v
              :where where-clause])))
+
+(defmacro defq
+  ([conn n filename]
+   `(let [m (-> (query ~(str n) ~filename)
+                (assoc :ns *ns*))
+          q-fn# (query-fn ~conn m)]
+      (create-root-var ~(str n) q-fn#)))
+  ([conn filename]
+   `(query-fns ~conn ~filename)))
