@@ -168,11 +168,10 @@
    (let [schema (schema conn)
          sql (sql/sql-vec schema v params)]
      (vec
-      (walk/postwalk coerce-timestamp-inst
-       (walk/postwalk coerce-inst
+      (walk/postwalk #(-> % coerce-inst coerce-timestamp-inst)
         (walk/prewalk #(parse-json schema %)
          (jdbc/query conn sql {:keywordize? false
-                               :identifiers qualify-col})))))))
+                               :identifiers qualify-col}))))))
   ([conn v]
    (q conn v {})))
 
