@@ -159,6 +159,15 @@
         val))
     val))
 
+(defn coerce-boolean
+  "Coerce sqlite booleans: 1 or 0 to clojure booleans"
+  [schema val]
+  (if (and (vector? val)
+           (= 2 (count val))
+           (= "boolean" (get-in schema [(first val) :db/type])))
+    [(first val) (= 1 (second val))]
+    val))
+
 (defn q
   "The main entry point for queries
 
@@ -168,7 +177,7 @@
    (let [schema (schema conn)
          sql (sql/sql-vec schema v params)]
      (vec
-      (walk/postwalk #(-> % coerce-inst coerce-timestamp-inst)
+      (walk/postwalk #(-> % coerce-inst coerce-timestamp-inst ((partial coerce-boolean schema)))
         (walk/prewalk #(parse-json schema %)
          (jdbc/query conn sql {:keywordize? false
                                :identifiers qualify-col}))))))
