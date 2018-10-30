@@ -121,7 +121,7 @@
   "This is a relatively complex function to replace col names with $ in them, pull comes at a cost"
   [s]
   (let [parts (string/split s #"\$")
-        k-ns (first (map #(string/replace % #"_" "-") parts))
+        k-ns (-> (first parts) (string/replace #"_" "-"))
         k-n (->> (rest parts)
                  (map #(string/replace % #"_" "-"))
                  (string/join "-"))]
