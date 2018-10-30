@@ -9,8 +9,8 @@
             [lighthouse.sql :as sql]
             [lighthouse.defq :refer [query create-root-var query-fn query-fns]]
             [lighthouse.util :refer [wrap kebab-case]])
-  (:import (com.zaxxer.hikari HikariConfig HikariDataSource))
-  (:import (java.time Instant)
+  (:import (com.zaxxer.hikari HikariConfig HikariDataSource)
+           (java.time Instant)
            (java.text SimpleDateFormat))
   (:refer-clojure :exclude [update])
   (:gen-class))
