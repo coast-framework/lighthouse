@@ -329,11 +329,12 @@
     {:update (str "update " table)}))
 
 (defn update-set [schema v]
-  (let [v (conj v [:updated-at (Instant/now)])]
-    {:update-set (str "set " (->> (map (fn [[k _]] (str (-> k name snake-case) " = ?")) v)
+  (let [v (conj v [:updated-at (Instant/now)])
+        args (filter #(not= "id" (-> % first name)) v)]
+    {:update-set (str "set " (->> (map (fn [[k _]] (str (-> k name snake-case) " = ?")) args)
                                   (distinct)
                                   (string/join ", ")))
-     :update-set-args (distinct (map second v))}))
+     :update-set-args (distinct (map second args))}))
 
 (defn sql-part [schema [k v]]
   (condp = k
