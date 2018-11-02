@@ -203,7 +203,7 @@
 (defn joins [schema args]
   (let [args (map keyword args)]
     {:joins (->> (select-keys schema args)
-                 (map (fn [[_ v]] [(:db/ref v) (:db/rel v)]))
+                 (map (fn [[_ v]] [(:db/rel v) (:db/ref v)]))
                  (map join)
                  (string/join "\n"))
      :join-ks (->> (select-keys schema args)
