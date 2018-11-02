@@ -102,8 +102,7 @@
       (concat
         [:update table
          :where [(name pk) (map #(get % pk) v)]]
-        (conj (->> (map #(dissoc % pk) v)
-                   (mapcat identity)
+        (conj (->> (mapcat identity v)
                    (distinct))
               :set)))))
 
