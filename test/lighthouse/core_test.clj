@@ -19,14 +19,14 @@
 
 (deftest insert-test
   (testing "insert with sql without rel"
-    (transact conn '[:insert person/name
-                     :values ["sean"]]))
+    (is (= '(1) (transact conn '[:insert person/name
+                                 :values ["sean"]]))))
 
   (testing "insert related data"
-    (insert conn {:todo/person 1 :todo/name "todo #1" :todo/done false})))
+    (is (= '(1) (insert conn {:todo/person 1 :todo/name "todo #1" :todo/done false})))))
 
 (deftest join-test
   (testing "basic join"
-    (q conn '[:select person/name todo/name
-              :from person
-              :joins todo/person])))
+    (is (= [{:person/name "sean" :todo/name "todo #1"}] (q conn '[:select person/name todo/name
+                                                                  :from person
+                                                                  :joins todo/person])))))
