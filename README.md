@@ -195,7 +195,7 @@ Query data like this
 
 ; joins are supported too
 (db/q conn '[:select todo/* person/*
-             :from todo
+             :from todo/person
              :joins person])
 ; => [{:todo/id 1 :todo/name ... :person/id 1 :person/name "swlkr" ...}]
 ```
