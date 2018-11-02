@@ -11,18 +11,19 @@
                  {:db/rel :todo/person :db/type :one :db/ref :person/id}
                  {:db/col :todo/name :db/type "text"}
                  {:db/col :todo/done :db/type "boolean" :db/nil? false :db/default false}])
-  (delete conn {:person/name "sean"})
-  (f))
+  (f)
+  (delete conn {:person/id 1})
+  (delete conn {:todo/id 1}))
 
 (use-fixtures :once setup-db)
 
-(deftest insert-test)
-  ; (testing "insert with sql without rel"
-  ;   (transact conn '[:insert person/name
-  ;                    :values ["sean"]]))
-  ;
-  ; (testing "insert related data"
-  ;   (insert conn {:todo/person 1 :todo/name "todo #1" :todo/done false})))
+(deftest insert-test
+  (testing "insert with sql without rel"
+    (transact conn '[:insert person/name
+                     :values ["sean"]]))
+
+  (testing "insert related data"
+    (insert conn {:todo/person 1 :todo/name "todo #1" :todo/done false})))
 
 (deftest join-test
   (testing "basic join"
