@@ -1,7 +1,15 @@
-{:paths ["src"]
+{:paths ["src" "test"]
 
  :deps {com.zaxxer/HikariCP {:mvn/version "2.7.8"}
         org.clojure/clojure {:mvn/version "1.9.0"}
         org.clojure/java.jdbc {:mvn/version "0.7.5"}
         org.clojure/data.json {:mvn/version "0.2.6"}
-        org.slf4j/slf4j-nop {:mvn/version "1.7.25"}}}
+        org.slf4j/slf4j-nop {:mvn/version "1.7.25"}}
+
+ :aliases {:repl {:extra-deps {nrepl {:mvn/version "0.4.4"}}}
+
+           :test {:extra-paths ["test"]
+                  :main-opts ["-m" "cognitect.test-runner"]
+                  :extra-deps
+                  {com.cognitect/test-runner {:git/url "https://github.com/cognitect-labs/test-runner.git"
+                                              :sha "5f2b5c2efb444df76fb5252102b33f542ebf7f58"}}}}}
