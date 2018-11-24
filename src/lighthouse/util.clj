@@ -78,3 +78,25 @@
 (defn name* [val]
   (when (ident? val)
     (name val)))
+
+(defn sqlite? [arg]
+  (cond
+    (string? arg) (> (.indexOf arg "sqlite") -1)
+    (map? arg) (sqlite? (.getJdbcUrl (:datasource arg)))
+    :else false))
+
+(defn pg? [arg]
+  (cond
+    (string? arg) (> (.indexOf arg "postgres") -1)
+    (map? arg) (pg? (.getJdbcUrl (:datasource arg)))
+    :else false))
+
+(defn one? [m]
+  (and (rel? m)
+       (= :one (:db/type m))))
+
+(defn db [conn]
+  (cond
+    (sqlite? conn) :sqlite
+    (pg? conn) :pg
+    :else nil))
