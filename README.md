@@ -31,7 +31,7 @@ Connect to your db like this:
 ```clojure
 (def conn (db/connect "jdbc:sqlite:todos.db"))
 ; or
-(def conn (db/connect "jdbc:postgres://localhost:5432/todos"))
+(def conn (db/connect "jdbc:postgresql://localhost:5432/todos"))
 ```
 
 ## Migrations
