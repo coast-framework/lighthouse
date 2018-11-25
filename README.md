@@ -76,7 +76,7 @@ reference the existing column with `:db/id` and then give it the properties you 
 (db/migrate conn done->done-at)
 ```
 
-## Migrations - Tables
+## Tables
 
 All tables are created from a vector of maps, so this
 
@@ -103,7 +103,7 @@ create table if not exists todo (
 
 The namespaces of the `:db/col` value in this case `:person/nick` -> `person` and `:todo/name` -> `todo` are the table names. This happens for the distinct namespaces of every key in every migration.
 
-## Migrations - Columns
+## Columns
 
 Columns are the names of the `:db/col` values in the migration maps, so this:
 
@@ -123,7 +123,7 @@ alter table todo add column name text;
 
 SQLite has several restrictions on what alter table can and can't do, namely, altering a table to add a column must have a default value when specifying not null, this will fail if you don't specify something. This can work on postgres under certain conditions.
 
-## Migrations - Relationships (Foreign Keys)
+## Relationships (Foreign Keys)
 
 Foreign keys are a little special and require two, yes that's right, two maps to function as keys in pull queries. For example:
 
@@ -182,7 +182,7 @@ left outer join todo on todo.person = person.id
 
 There's more info about pull in the queries section below, but that's pretty much everything you need to know to have a great pull experience!
 
-## Data - Insert
+## Insert
 
 Insert data into the database like this
 
@@ -208,7 +208,7 @@ Insert data into the database like this
                   :todo/done false}]}))
 ```
 
-## Data - Update
+## Update
 
 Update data like this
 
@@ -226,7 +226,23 @@ Update data like this
                     :where [todo/id [2 3]]])
 ```
 
-## Data - Queries
+## Delete
+
+Delete data like this
+
+```clojure
+(db/delete conn {:todo/id 1})
+
+; or multiple rows like this
+(db/delete conn [{:todo/id 1} {:todo/id 2} {:todo/id 3}])
+
+; there's always transact too
+(db/transact conn '[:delete
+                    :from todo
+                    :where [todo/id [1 2 3]]]) ; this implicitly does an in query
+```
+
+## Queries
 
 Query data like this
 
@@ -258,7 +274,7 @@ Query data like this
 ; => [{:todo/id 1 :todo/name ... :person/id 1 :person/name "swlkr" ...}]
 ```
 
-## Data - Pull Queries
+## Pull Queries
 
 Pull queries are special because they don't map to sql 1:1, they return your data hierarchically with the help of some left outer join json aggregation and `clojure.walk` after the fact. They work together with the schema migrations to make your life easier.
 
@@ -295,18 +311,58 @@ You can run these queries
               [:todo/name 'like "%blog post"])
 ```
 
-## Data - Delete
+## Plain Old SQL
 
-Delete data like this
+Don't like all of this fancy schmancy pull and q stuff? That's ok, there's always `defq`.
+
+Make a SQL file in `resources`
+
+```sql
+-- name: posts-with-comments
+select
+  post.*,
+  c.comment_count
+from
+  post
+join
+  (
+    select
+      comment.post_id,
+      count(comment.id) as comment_count
+    from
+      comment
+    where
+      comment.post_id = :post_id
+    group by
+      comment.post_id
+ ) c on c.post_id = post.id
+```
+
+Then in a clojure file, reference that same sql file in `defq`
 
 ```clojure
-(db/delete conn {:todo/id 1})
+(ns your-project
+  (:require [lighthouse.core :refer [defq]]))
 
-; or multiple rows like this
-(db/delete conn [{:todo/id 1} {:todo/id 2} {:todo/id 3}])
+(defq conn posts-with-comments "posts.sql")
 
-; there's always transact too
-(db/transact conn '[:delete
-                    :from todo
-                    :where [todo/id [1 2 3]]]) ; this implicitly does an in query
+(posts-with-count {:post-id 1}) ; => [{:id 1 ... :comment-count 12}]
 ```
+
+or if you have a lot of queries in a single sql file call defq without the name argument
+
+```clojure
+(defq conn "posts.sql")
+```
+
+and defq will create functions for each bit of named sql in the current namespace.
+
+## Plain Old SQL Migrations
+
+If the fancy schmancy migrations aren't working for you either, there's always `:db/up` and `:db/down`:
+
+```clojure
+(def plain-sql-migration [{:db/up "create table todo(id serial primary key, name text not null)" :db/down "drop table todo"}])
+```
+
+You can mix and match with the edn migrations.
