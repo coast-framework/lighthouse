@@ -203,19 +203,23 @@
             (not (empty? j-ks)))
     (let [t (-> (map #(-> % namespace snake-case) s-ks) (first))
           j (-> (map #(-> % name snake-case) j-ks) (first))]
-      (str "from " (or t j)))))
+      (str "from " (or j t)))))
 
 (defn join [v]
   (str "join " (join-statement v)))
 
+(defn get-one-rel [schema k]
+  (or (get schema (-> schema k :db/ref))
+      (get schema k)))
+
 (defn joins [schema args]
-  (let [args (map keyword args)]
-    {:joins (->> (select-keys schema args)
-                 (map (fn [[_ v]] [(:db/rel v) (:db/ref v)]))
+  (let [args (map keyword args)
+        one-rels (map #(get-one-rel schema %) args)]
+    {:joins (->> one-rels
+                 (map (fn [m] [(:db/rel m) (:db/ref m)]))
                  (map join)
                  (string/join "\n"))
-     :join-ks (->> (select-keys schema args)
-                   (map (fn [[_ v]] (:db/rel v))))}))
+     :join-ks (map :db/rel one-rels)}))
 
 (defn wrap-str [ws s]
   (if (string/blank? s)
