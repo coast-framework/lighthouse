@@ -8,7 +8,7 @@
             [clojure.java.shell :as shell]
             [lighthouse.migrator :as migrator]
             [lighthouse.sql :as sql]
-            [lighthouse.defq :refer [query create-root-var query-fn query-fns]]
+            [lighthouse.defq :refer [query-fns]]
             [lighthouse.util :refer [db pg? sqlite? wrap kebab-case table snake-case]]
             [lighthouse.transact :as lh.transact])
   (:import (com.zaxxer.hikari HikariConfig HikariDataSource)
@@ -193,7 +193,7 @@
     (q conn [:pull v
              :where where-clause])))
 
-(defmacro defq
+(defn defq
   "Use regular .sql files and call them as functions
 
   Ex:
@@ -207,17 +207,12 @@
   clojure:
   (defq \"test.sql\")
 
-  creates a fn some-sql in the current namespace
+  creates fn some-sql in the current namespace
 
   (some-sql {:name \"test todo #1\"})
   "
-  ([conn n filename]
-   `(let [m (-> (query ~(str n) ~filename)
-                (assoc :ns *ns*))
-          q-fn# (query-fn ~conn m)]
-      (create-root-var ~(str n) q-fn#)))
-  ([conn filename]
-   `(query-fns ~conn ~filename)))
+  [conn filename]
+  (query-fns ~conn ~filename))
 
 (defn create
  "Creates a new database"
