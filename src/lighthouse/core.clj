@@ -1,10 +1,8 @@
 (ns lighthouse.core
   (:require [clojure.string :as string]
             [clojure.java.jdbc :as jdbc]
-            [clojure.edn :as edn]
             [clojure.data.json :as json]
             [clojure.walk :as walk]
-            [clojure.instant :as instant]
             [clojure.java.shell :as shell]
             [lighthouse.migrator :as migrator]
             [lighthouse.sql :as sql]
@@ -13,7 +11,8 @@
             [lighthouse.transact :as lh.transact])
   (:import (com.zaxxer.hikari HikariConfig HikariDataSource)
            (java.time Instant)
-           (java.text SimpleDateFormat))
+           (java.text SimpleDateFormat)
+           (java.util TimeZone))
   (:refer-clojure :exclude [update drop])
   (:gen-class))
 
@@ -139,12 +138,24 @@
     [(first val) (json/read-str (second val) :key-fn qualify-col)]
     val))
 
+(defn one-first
+  "Get the first value from a one rel (since it's a vector)"
+  [schema val]
+  (if (and (sequential? val)
+           (= :one (get-in schema [(first val) :db/type]))
+           (sequential? (second val))
+           (= 1 (count (second val))))
+    [(first val) (first (second val))]
+    val))
+
 (defn coerce-inst
   "Coerce json iso8601 to clojure #inst"
   [val]
   (if (string? val)
     (try
-      (instant/read-instant-timestamp val)
+      (let [fmt (SimpleDateFormat. "yyyy-MM-dd'T'HH:mm:ss'Z'")
+            _ (.setTimeZone fmt (TimeZone/getTimeZone "UTC"))]
+        (.parse fmt val))
       (catch Exception e
         val))
     val))
@@ -154,7 +165,8 @@
   [val]
   (if (string? val)
     (try
-      (let [fmt (SimpleDateFormat. "yyyy-MM-dd HH:mm:ss")]
+      (let [fmt (SimpleDateFormat. "yyyy-MM-dd HH:mm:ss")
+            _ (.setTimeZone fmt (TimeZone/getTimeZone "UTC"))]
         (.parse fmt val))
       (catch Exception e
         val))
@@ -180,7 +192,7 @@
          sql (sql/sql-vec db schema v params)]
      (vec
       (walk/postwalk #(-> % coerce-inst coerce-timestamp-inst ((partial coerce-boolean schema)))
-        (walk/prewalk #(parse-json schema %)
+        (walk/prewalk #(->> (parse-json schema %) (one-first schema))
          (jdbc/query conn sql {:keywordize? false
                                :identifiers qualify-col}))))))
   ([conn v]
