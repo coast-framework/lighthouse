@@ -6,7 +6,7 @@ _clojure + sql + hikaricp connection pool + datomic inspired queries_
 Add this to your `deps.edn`
 
 ```clojure
-coast-framework/lighthouse {:mvn/version "1.1.0"}
+coast-framework/lighthouse {:mvn/version "1.1.1"}
 ```
 
 You'll also need a jdbc driver for your db of choice:
