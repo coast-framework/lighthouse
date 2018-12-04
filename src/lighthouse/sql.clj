@@ -79,8 +79,8 @@
     :limit (pull-limit v)
     :else {}))
 
-(defn pull-from [order table]
-  (let [order (or order "order by id")]
+(defn pull-from [o table]
+  (let [order (or o "order by id")]
     (string/join "\n" ["("
                        "select"
                        (str "  " table ".*, ")
@@ -157,7 +157,7 @@
                (map json-build-object)
                (concat child-cols)
                (string/join ","))
-          (str ") " order ") as " (pull-col k))
+          (str ")) as " (pull-col k))
           (str "from " (if (nil? joins)
                          (->> k keyword name snake-case (pull-from order))
                          (->> joins namespace snake-case (pull-from order))))
