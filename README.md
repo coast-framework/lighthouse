@@ -272,6 +272,14 @@ Query data like this
              :from todo
              :joins person/todos])
 ; => [{:todo/id 1 :todo/name ... :person/id 1 :person/name "swlkr" ...}]
+
+; you can also add a sql string in the where clause
+(db/q conn '[:select todo/name todo/done
+             :where [todo/done ?done]
+                    ["todo.created_at > now()"]
+             :order todo/created-at desc]
+           {:done true})
+; => [{:todo/name "write readme" :todo/done true}]
 ```
 
 ## Pull Queries
