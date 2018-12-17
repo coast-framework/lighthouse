@@ -346,7 +346,7 @@
     {:update-set (str "set " (->> (map (fn [[k _]] (str (-> k name snake-case) " = ?")) args)
                                   (distinct)
                                   (string/join ", ")))
-     :update-set-args (distinct (map second args))}))
+     :update-set-args (map second args)}))
 
 (defn sql-part [db schema [k v]]
   (condp = k
@@ -375,4 +375,4 @@
         from-clause (or (:from m) (from-clause select-ks join-ks))
         sql (->> (filter some? [select pull delete update update-set insert values from-clause joins where order offset limit group])
                  (string/join " "))]
-    (apply conj [sql] (concat (filter some? update-set-args) (filter some? args)))))
+    (apply conj [sql] (concat update-set-args (filter some? args)))))
