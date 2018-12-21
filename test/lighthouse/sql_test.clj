@@ -1,6 +1,13 @@
 (ns lighthouse.sql-test
   (:require [lighthouse.sql :as sql]
-            [clojure.test :refer [deftest testing is]]))
+            [clojure.test :refer [deftest testing is use-fixtures]]
+            [pjstadig.humane-test-output :as humane-test-output]))
+
+(defn setup [f]
+  (humane-test-output/activate!)
+  (f))
+
+(use-fixtures :once setup)
 
 (deftest where-test
   (testing "where with and, not"
