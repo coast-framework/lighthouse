@@ -12,7 +12,7 @@
 (deftest update
   (testing "valid update transaction"
     (is (= (transact/update {:todo/name "new todo" :todo/id 1})
-           '(:update "todo" :where ["id" (1)] :set [:todo/name "new todo"] [:todo/id 1])))))
+           '(:update "todo" :where [:todo/id (1)] :set [:todo/name "new todo"] [:todo/id 1])))))
 
 (deftest delete
   (testing "valid delete transaction"

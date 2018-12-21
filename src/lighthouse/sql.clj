@@ -249,13 +249,15 @@
     :else "="))
 
 (defn where-part [v]
-  (if (vector? v)
-    (let [[k op* val] v
-          parts (if (= '!= op*)
-                  [(qualified-col-name k) (not-op val) (? val)]
-                  [(qualified-col-name k) (op op*) (? op*)])]
-      (string/join " " parts))
-    (throw (Exception. (str "where requires vectors to work. You typed: " v)))))
+  (if (not (vector? v))
+    (throw (Exception. (str "where requires vectors to work. You typed: " v)))
+    (if (sql-vec? v)
+      (first v)
+      (let [[k op* val] v
+            parts (if (= '!= op*)
+                    [(qualified-col-name k) (not-op val) (? val)]
+                    [(qualified-col-name k) (op op*) (? op*)])]
+        (string/join " " parts)))))
 
 (defn where-clause [[k v]]
   (string/join (str " " (name k) " ")
@@ -279,13 +281,18 @@
       (throw (Exception. (str "where only accepts and & or. You typed: " (if (nil? v) "nil" v))))
       (map where-clause wv))))
 
+(defn last-or-rest [v]
+  (if (sql-vec? v)
+    (rest v)
+    (last v)))
+
 (defn where [v]
   (if (sql-vec? v)
     {:where (str "where " (first v))
      :args (rest v)}
     {:where (str "where " (string/join " and " (map #(wrap-str "()" %) (where-clauses v))))
      :args (->> (filter vector? v)
-                (mapv last)
+                (mapv last-or-rest)
                 (filter some?)
                 (flat))}))
 
@@ -375,4 +382,4 @@
         from-clause (or (:from m) (from-clause select-ks join-ks))
         sql (->> (filter some? [select pull delete update update-set insert values from-clause joins where order offset limit group])
                  (string/join " "))]
-    (apply conj [sql] (concat update-set-args (filter some? args)))))
+    (apply conj [sql] (concat update-set-args (filter some? (flat args))))))

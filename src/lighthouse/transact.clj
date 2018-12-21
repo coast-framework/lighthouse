@@ -22,7 +22,7 @@
         pk (first (filter #(= "id" (name %)) (-> v first keys)))]
     (concat
       [:update table
-       :where [(name pk) (map #(get % pk) v)]]
+       :where [pk (mapv #(get % pk) v)]]
       (conj (->> (mapcat identity v)
                  (distinct))
             :set))))
