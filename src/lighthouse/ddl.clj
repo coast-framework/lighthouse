@@ -83,8 +83,12 @@
        ")"])))
 
 
-(defn create-extension [])
-(defn drop-extension [])
+(defn create-extension [s]
+  (str "create extension " s))
+
+
+(defn drop-extension [s]
+  (str "drop extension " s))
 
 
 (defn drop-table [table]

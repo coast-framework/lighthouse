@@ -1,6 +1,7 @@
 (ns lighthouse.ddl-test
   (:require [clojure.test :refer [deftest testing is]]
-            [lighthouse.ddl :refer [create-table text add-column drop-column drop-table]]))
+            [lighthouse.ddl :refer [create-table text add-column drop-column drop-table
+                                    create-extension drop-extension]]))
 
 (deftest sqlite-create-table-test
   (testing "create table in sqlite with default columns"
@@ -31,3 +32,13 @@
   (testing "add column"
     (is (= "alter table customer add column email text"
            (add-column :customer :email :text)))))
+
+(deftest create-extension-test
+  (testing "create extension"
+    (is (= "create extension citext"
+           (create-extension "citext")))))
+
+(deftest drop-extension-test
+  (testing "drop extension"
+    (is (= "drop extension citext"
+           (drop-extension "citext")))))
