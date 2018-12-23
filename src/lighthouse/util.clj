@@ -100,3 +100,11 @@
     (sqlite? conn) :sqlite
     (pg? conn) :pg
     :else nil))
+
+(defn sqlize [val]
+  (cond
+    (ident? val) (if (some? (namespace val))
+                   (str (-> val namespace snake-case) "." (-> val name snake-case))
+                   (-> val name snake-case))
+    (string? val) (snake-case val)
+    :else (throw (Exception. (str val " is not an ident or a string. Example: :customer, :public/customer or \"customer\"")))))
