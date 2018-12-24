@@ -12,32 +12,6 @@
                :pk "serial primary key"}})
 
 
-(defn add-column
-  "SQL for adding a column to an existing table"
-  [table col type]
-  (str "alter table " (util/sqlize table) " add column " (util/sqlize col) " " (name type)))
-
-
-(defn add-foreign-key [])
-(defn add-index [])
-(defn add-reference [])
-(defn add-timestamps [])
-(defn change-column [])
-
-
-(defn mappable? [coll]
-  (and (sequential? coll)
-       (even? (count coll))))
-
-
-(defn seq->map [coll]
-  (if (not (mappable? coll))
-    (throw (Exception. (str coll " requires pairs of elements. Example: (:a 1 :b 2) not (:a 1 :b)")))
-    (->> (partition 2 coll)
-         (map vec)
-         (into {}))))
-
-
 (defn not-null [m]
   (when (false? (:null m))
     "not null"))
@@ -58,17 +32,110 @@
     (str "collate " (get m :collate))))
 
 
-(defn text [col & args]
-  (let [m (seq->map args)]
-    (->> [(util/sqlize col)
-          "text"
-          (unique m)
-          (collate m)
-          (not-null m)
-          (col-default m)]
-         (filter some?)
-         (string/join " ")
-         (string/trim))))
+(defn col-type [type {:keys [precision scale]}]
+  (if (or (some? precision)
+          (some? scale))
+    (str (or (util/sqlize type) "numeric")
+         (when (or (some? precision)
+                   (some? scale))
+           (str "(" (string/join ","
+                      (filter some? [(or precision 0) scale]))
+                ")")))
+    (util/sqlize type)))
+
+
+(defn col [type col-name m]
+  "SQL fragment for adding a column in create or alter table"
+  (->> [(util/sqlize col-name)
+        (col-type type m)
+        (unique m)
+        (collate m)
+        (not-null m)
+        (col-default m)]
+       (filter some?)
+       (string/join " ")
+       (string/trim)))
+
+
+(defn add-column
+  "SQL for adding a column to an existing table"
+  [table col-name type & {:as m}]
+  (str "alter table " (util/sqlize table) " add column " (col type col-name m)))
+
+
+(defn on-delete [m]
+  (when (contains? m :on-delete)
+    (str "on delete " (util/sqlize (:on-delete m)))))
+
+
+(defn on-update [m]
+  (when (contains? m :on-update)
+    (str "on update " (util/sqlize (:on-update m)))))
+
+
+(defn add-foreign-key
+  "SQL for adding a foreign key column to an existing table"
+  [from to & {col :col pk :pk fk-name :name :as m}]
+  (let [from (util/sqlize from)
+        to (util/sqlize to)]
+   (string/join " "
+     (filter some?
+       ["alter table"
+        from
+        "add constraint"
+        (or (util/sqlize fk-name) (str from "_" to "_fk"))
+        "foreign key"
+        (str "(" (or (util/sqlize col) to) ")")
+        "references"
+        to
+        (str "(" (or (util/sqlize pk) "id") ")")
+        (on-delete m)
+        (on-update m)]))))
+
+
+(defn where [m]
+  (when (contains? m :where)
+    (str "where " (:where m))))
+
+
+(defn index-cols [cols {order :order}]
+  (->> (map #(conj [%] (get order %)) cols)
+       (map #(map util/sqlize %))
+       (map #(string/join " " %))
+       (map string/trim)))
+
+(defn add-index [table-name cols & {:as m}]
+  (let [table-name (util/sqlize table-name)
+        cols (if (sequential? cols)
+               cols
+               [cols])
+        cols (index-cols cols m)
+        col-name (string/join ", " cols)
+        index-col-names (map #(string/replace % #" " "_") cols)
+        index-name (or (:name m) (str table-name "_" (string/join "_" index-col-names) "_index"))]
+    (string/join " "
+      (filter some?
+        ["create"
+         (unique m)
+         "index"
+         index-name
+         "on"
+         table-name
+         (str "(" col-name ")")
+         (where m)]))))
+
+
+(defn add-reference [])
+(defn add-timestamps [])
+(defn change-column [])
+
+
+(defn text [col-name & {:as m}]
+  (col :text col-name m))
+
+
+(defn decimal [col-name & {:as m}]
+  (col :decimal col-name m))
 
 
 (defn create-table [dialect table & args]

@@ -107,4 +107,5 @@
                    (str (-> val namespace snake-case) "." (-> val name snake-case))
                    (-> val name snake-case))
     (string? val) (snake-case val)
+    (nil? val) val
     :else (throw (Exception. (str val " is not an ident or a string. Example: :customer, :public/customer or \"customer\"")))))
