@@ -39,6 +39,9 @@
   [s m]
   (let [m (merge opts m)
         driver-class-name (driver-class-name s)
+        connection-init-sql (if (= "org.sqlite.JDBC" driver-class-name)
+                              "PRAGMA foreign_keys=ON"
+                              "")
         _ (when (nil? driver-class-name)
             (throw (Exception. "Unsupported connection string, only sqlite and postgres are supported currently")))
         c (doto (HikariConfig.)
@@ -51,7 +54,8 @@
             (.setIdleTimeout         (:idle-timeout m))
             (.setMaxLifetime         (:max-lifetime m))
             (.setMinimumIdle         (:minimum-idle m))
-            (.setMaximumPoolSize     (:maximum-pool-size m)))]
+            (.setMaximumPoolSize     (:maximum-pool-size m))
+            (.setConnectionInitSql   connection-init-sql))]
     {:datasource (HikariDataSource. c)}))
 
 (defn connect
