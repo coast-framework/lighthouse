@@ -2,16 +2,27 @@
   (:require [clojure.test :refer [deftest testing is]]
             [lighthouse.ddl :refer [create-table text add-column drop-column drop-table
                                     create-extension drop-extension add-foreign-key
-                                    decimal add-index]]))
+                                    decimal add-index add-reference
+                                    alter-column timestamps]]))
 
 (deftest sqlite-create-table-test
-  (testing "create table in sqlite with default columns"
+  (testing "create table with nothing"
+    (is (= "create table customer ( id integer primary key )"
+           (create-table :sqlite :customer))))
+
+  (testing "create table in sqlite with timestamps"
     (is (= "create table customer ( id integer primary key, updated_at timestamp, created_at timestamp not null default current_timestamp )"
-           (create-table :sqlite :customer)))))
+           (create-table :sqlite :customer
+             (timestamps :sqlite))))))
 
 (deftest pg-create-table-test
-  (testing "create table in sqlite with default columns"
+  (testing "create table in postgres with timestamp columns"
     (is (= "create table customer ( id serial primary key, updated_at timestamptz, created_at timestamptz not null default now() )"
+           (create-table :pg :customer
+             (timestamps :pg)))))
+
+  (testing "create table in postgres with default columns"
+    (is (= "create table customer ( id serial primary key )"
            (create-table :pg :customer)))))
 
 (deftest text-test
@@ -95,3 +106,13 @@
   (testing "unique two column index with order and where"
     (is (= "create unique index customer_email_desc_name_asc_index on customer (email desc, name asc) where active")
         (add-index :customer [:email :name] :unique true :where "active" :order {:email :desc :name :asc}))))
+
+(deftest add-reference-test
+  (testing "basic reference"
+    (is (= "alter table todo add column customer integer references customer (id)"
+           (add-reference :todo :customer)))))
+
+(deftest alter-column-test
+  (testing "basic alter column with using"
+    (is (= "alter table todo alter column customer type datetime using now()"
+           (alter-column :todo :customer :datetime :using "now()")))))

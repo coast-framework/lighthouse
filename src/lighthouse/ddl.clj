@@ -104,7 +104,9 @@
        (map #(string/join " " %))
        (map string/trim)))
 
-(defn add-index [table-name cols & {:as m}]
+(defn add-index
+  "SQL for adding an index to an existing table"
+  [table-name cols & {:as m}]
   (let [table-name (util/sqlize table-name)
         cols (if (sequential? cols)
                cols
@@ -125,9 +127,32 @@
          (where m)]))))
 
 
-(defn add-reference [])
-(defn add-timestamps [])
-(defn change-column [])
+(defn add-reference
+  "SQL for adding a foreign key column to an existing table"
+  [table-name ref-name & {:as m}]
+  (string/join " "
+    (filter some?
+      ["alter table"
+       (util/sqlize table-name)
+       "add column"
+       (util/sqlize ref-name)
+       (or (-> m :type util/sqlize) "integer")
+       "references"
+       (util/sqlize ref-name)
+       (str "(id)")])))
+
+
+(defn alter-column [table-name col-name type & {:as m}]
+  (string/join " "
+    (filter some?
+      ["alter table"
+       (util/sqlize table-name)
+       "alter column"
+       (util/sqlize col-name)
+       "type"
+       (util/sqlize type)
+       (when (contains? m :using)
+        (str "using " (:using m)))])))
 
 
 (defn text [col-name & {:as m}]
@@ -138,15 +163,15 @@
   (col :decimal col-name m))
 
 
-(defn create-table [dialect table & args]
+(defn create-table
+  "SQL to create a table"
+  [dialect table & args]
+  (let [args (if (sequential? args) args '())])
   (string/join " "
     (filter some?
       [(str "create table " (util/sqlize table) " (")
-       (str "id " (get-in sql [dialect :pk]) ",")
-       (when (not (empty? args))
-         (str (string/join ", " args) ","))
-       (str "updated_at " (get-in sql [dialect :timestamp]) ",")
-       (str "created_at " (get-in sql [dialect :timestamp]) " not null default " (get-in sql [dialect :now]))
+       (string/join ", "
+        (conj args (str "id " (get-in sql [dialect :pk]))))
        ")"])))
 
 
@@ -168,12 +193,58 @@
   (str "alter table " (util/sqlize table) " drop column " (util/sqlize col)))
 
 
-(defn drop-foreign-key [])
-(defn drop-index [])
-(defn drop-reference [])
-(defn drop-timestamps [])
-(defn rename-column [])
-(defn rename-index [])
-(defn rename-table [])
+(defn drop-foreign-key [alter-table-name & {:as m}]
+  (let [constraint (when (contains? m :table)
+                     (util/sqlize (:table m)) "_" (util/sqlize alter-table-name) "_fkey")
+        constraint (if (contains? m :name)
+                     (util/sqlize (:name m))
+                     constraint)]
+    (str "alter table " (util/sqlize alter-table-name) " drop constraint " constraint)))
 
-(defn timestamps [])
+
+(defn drop-index [table-name & {cols :column :as m}]
+  (let [cols (if (sequential? cols) cols [cols])
+        cols (index-cols cols m)
+        col-name (string/join ", " cols)
+        index-col-names (map #(string/replace % #" " "_") cols)
+        index-name (or (-> m :name util/sqlize) (str table-name "_" (string/join "_" index-col-names) "_index"))]
+    (str "drop index " index-name)))
+
+
+(defn drop-reference [table-name ref-name]
+  (str "alter table "
+       (util/sqlize table-name)
+       " drop constraint "
+       (util/sqlize ref-name) "_" (util/sqlize table-name) "_fkey"))
+
+
+(defn rename-column [table-name column-name new-column-name]
+  (string/join " "
+    ["alter table"
+     (util/sqlize table-name)
+     "rename column"
+     (util/sqlize column-name)
+     "to"
+     (util/sqlize new-column-name)]))
+
+
+(defn rename-index [index-name new-index-name]
+  (string/join " "
+    ["alter index"
+     index-name
+     "rename to"
+     new-index-name]))
+
+
+(defn rename-table [table-name new-table-name]
+  (string/join " "
+    ["alter table"
+     table-name
+     "rename to"
+     new-table-name]))
+
+
+(defn timestamps [dialect]
+  (string/join " "
+    [(str "updated_at " (get-in sql [dialect :timestamp]) ",")
+     (str "created_at " (get-in sql [dialect :timestamp]) " not null default " (get-in sql [dialect :now]))]))
