@@ -22,4 +22,4 @@
 
 (defn rollback
   "Rolls back a database schema"
-  [migration])
+  [conn migration])
