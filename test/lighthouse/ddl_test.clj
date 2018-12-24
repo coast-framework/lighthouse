@@ -1,9 +1,15 @@
 (ns lighthouse.ddl-test
-  (:require [clojure.test :refer [deftest testing is]]
+  (:require [clojure.test :refer [deftest testing is use-fixtures]]
             [lighthouse.ddl :refer [create-table text add-column drop-column drop-table
                                     create-extension drop-extension add-foreign-key
                                     decimal add-index add-reference
-                                    alter-column timestamps]]))
+                                    alter-column timestamps]]
+            [pjstadig.humane-test-output :as humane-test-output]))
+
+(defn setup [f]
+  (humane-test-output/activate!)
+  (f))
+
 
 (deftest sqlite-create-table-test
   (testing "create table with nothing"
