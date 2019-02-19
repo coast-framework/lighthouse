@@ -178,7 +178,8 @@
   (if (and (vector? val)
            (= 2 (count val))
            (= "boolean" (get-in schema [(first val) :db/type])))
-    [(first val) (= 1 (second val))]
+    [(first val) (or (true? (second val))
+                     (= 1 (second val)))]
     val))
 
 (defn q
