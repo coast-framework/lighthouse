@@ -97,7 +97,7 @@
   ([conn query params]
    (let [schema (schema conn)
          db (db conn)
-         sql (sql/sql-vec db schema query {})]
+         sql (sql/sql-vec db schema query params)]
      (jdbc/execute! conn sql)))
   ([conn query]
    (transact conn query {})))
@@ -178,7 +178,8 @@
   (if (and (vector? val)
            (= 2 (count val))
            (= "boolean" (get-in schema [(first val) :db/type])))
-    [(first val) (= 1 (second val))]
+    [(first val) (or (true? (second val))
+                     (= 1 (second val)))]
     val))
 
 (defn q
