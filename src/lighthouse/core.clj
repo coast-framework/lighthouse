@@ -97,7 +97,7 @@
   ([conn query params]
    (let [schema (schema conn)
          db (db conn)
-         sql (sql/sql-vec db schema query {})]
+         sql (sql/sql-vec db schema query params)]
      (jdbc/execute! conn sql)))
   ([conn query]
    (transact conn query {})))
