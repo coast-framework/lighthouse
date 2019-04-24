@@ -39,7 +39,7 @@ Connect to your db like this:
 Change your db schema like this
 
 ```clojure
-(def todos-users [{:db/col :person/name :db/type "text" :db/unique? true :db/nil? false}
+(def todos-users [{:db/col :person/name :db/type "text" :db/unique? true}
                   {:db/rel :person/todos :db/type :many :db/ref :todo/person}
                   {:db/rel :todo/person :db/type :one :db/ref :person/id}
                   {:db/col :todo/name :db/type "text"}
@@ -269,7 +269,6 @@ Query data like this
 
 ; joins are supported too
 (db/q conn '[:select todo/* person/*
-             :from todo
              :joins person/todos])
 ; => [{:todo/id 1 :todo/name ... :person/id 1 :person/name "swlkr" ...}]
 
