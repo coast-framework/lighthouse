@@ -198,6 +198,16 @@
   ([conn v]
    (q conn v {})))
 
+
+(defn sql
+  ([conn v params]
+   (let [schema (schema conn)
+         db (db conn)]
+     (sql/sql-vec db schema v params)))
+  ([conn v]
+   (sql conn v {})))
+
+
 (defn pull
   "The main entry point for queries that return a nested result based on a lighthouse schema and a primary key"
   [conn v where-clause]

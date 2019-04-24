@@ -12,4 +12,5 @@
                   :main-opts ["-m" "cognitect.test-runner"]
                   :extra-deps {com.cognitect/test-runner {:git/url "https://github.com/cognitect-labs/test-runner.git"
                                                           :sha "5f2b5c2efb444df76fb5252102b33f542ebf7f58"}
-                               pjstadig/humane-test-output {:mvn/version "0.9.0"}}}}}
+                               pjstadig/humane-test-output {:mvn/version "0.9.0"}
+                               org.xerial/sqlite-jdbc {:mvn/version "3.25.2"}}}}}
