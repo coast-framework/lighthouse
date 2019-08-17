@@ -1,11 +1,11 @@
 .PHONY: test
 
 test:
-	clj -A\:test
+	clj -Atest
 
 repl:
-	clj -R:repl bin/repl.clj
+	clj -Rrepl bin/repl.clj
 
-deploy: test
+release: test
 	clj -Spom
 	mvn deploy
