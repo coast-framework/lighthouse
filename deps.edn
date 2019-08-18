@@ -8,7 +8,7 @@
 
  :aliases {:repl {:extra-deps {nrepl {:mvn/version "0.4.5"}}}
 
-           :test {:extra-paths ["test"]
+           :test {:extra-paths ["test" "resources"]
                   :main-opts ["-m" "cognitect.test-runner"]
                   :extra-deps {com.cognitect/test-runner {:git/url "https://github.com/cognitect-labs/test-runner.git"
                                                           :sha "5f2b5c2efb444df76fb5252102b33f542ebf7f58"}

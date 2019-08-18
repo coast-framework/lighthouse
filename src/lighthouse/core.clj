@@ -216,7 +216,7 @@
     (q conn [:pull v
              :where where-clause])))
 
-(defn defq
+(defmacro defq
   "Use regular .sql files and call them as functions
 
   Ex:
@@ -235,7 +235,7 @@
   (some-sql {:name \"test todo #1\"})
   "
   [conn filename]
-  (query-fns ~conn ~filename))
+  `(query-fns ~conn ~filename))
 
 (defn create
  "Creates a new database"

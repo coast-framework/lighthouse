@@ -31,3 +31,10 @@
     (is (= ["select todo.created_at as todo$created_at, todo.done as todo$done, todo.id as todo$id, todo.item as todo$item, todo.name as todo$name, todo.person as todo$person, todo.updated_at as todo$updated_at, person.created_at as person$created_at, person.id as person$id, person.name as person$name, person.updated_at as person$updated_at from person join todo on todo.person = person.id"]
            (db/sql conn '[:select todo/* person/*
                           :joins person/todos])))))
+
+(db/defq conn "test.sql")
+
+(deftest defq-test
+  (testing "defq with a sql file"
+    (is (= '()
+           (all-todos)))))
